@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AdminDashboard } from "./components/AdminDashboard";
 
 function App() {
   // --- ESTADO DE SESIÓN (LOGIN) ---
@@ -42,8 +43,8 @@ function App() {
       }
       cargarProductos();
       cargarPedidos();
-      // Asignar pestaña por defecto según rol
-      setPestana(usuarioActual.rol === "ADMIN" ? "usuarios" : "catalogo");
+      // Si es ADMIN, abre directamente el Dashboard de métricas
+      setPestana(usuarioActual.rol === "ADMIN" ? "dashboard" : "catalogo");
     }
   }, [usuarioActual]);
 
@@ -204,7 +205,6 @@ function App() {
       const res = await fetch(`${API_BASE}/pedidos`);
       if (res.ok) {
         const data = await res.json();
-        // Separación estricta de datos
         if (usuarioActual?.rol === "CLIENTE") {
           setPedidos(data.filter((ped) => ped.usuario_id === usuarioActual.id));
         } else {
@@ -216,7 +216,6 @@ function App() {
     }
   };
 
-  // Compra directa para el cliente
   const handleComprarProducto = async (productoId) => {
     const cantidad = cantidadesSeleccionadas[productoId] || 1;
     try {
@@ -230,7 +229,15 @@ function App() {
       });
 
       if (res.ok) {
-        alert("¡Compra realizada con éxito!");
+        const nuevoPedido = await res.json();
+        alert(
+          `¡Pedido registrado correctamente!\n\n` +
+          `Pedido: #${nuevoPedido.id}\n` +
+          `Estado: Pendiente de Pago.\n\n` +
+          `Se ha iniciado el envío de las instrucciones de pago a tu correo electrónico. ` +
+          `Este proceso es asíncrono y la entrega depende de la confirmación SMTP. ` +
+          `Revisa tu bandeja de entrada.`
+        );
         cargarPedidos();
         cargarProductos();
       } else {
@@ -372,14 +379,13 @@ function App() {
     );
   }
 
-  // =========================================================
+  // ==========================================
   // PANEL AUTENTICADO CON RBAC
-  // =========================================================
+  // ==========================================
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0d1117", color: "#e6edf3", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
       {/* SIDEBAR IZQUIERDO */}
       <aside style={{ width: "260px", background: "#161b22", borderRight: "1px solid #30363d", display: "flex", flexDirection: "column", padding: "24px 16px", boxSizing: "border-box", flexShrink: 0 }}>
-        {/* Identidad */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "26px", paddingLeft: "6px" }}>
           <div style={{ width: "36px", height: "36px", background: "#1f6feb", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
@@ -390,7 +396,6 @@ function App() {
           </div>
         </div>
 
-        {/* Tarjeta del Rol */}
         <div style={{ background: "#0d1117", border: "1px solid #30363d", borderRadius: "10px", padding: "14px", marginBottom: "24px" }}>
           <div style={{ fontSize: "11px", color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>SESIÓN ACTIVA</div>
           <div style={{ fontWeight: "600", color: "#f0f6fc", fontSize: "15px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{usuarioActual.nombre}</div>
@@ -399,9 +404,33 @@ function App() {
           </div>
         </div>
 
-        {/* Menú de Navegación según Rol */}
         <nav style={{ display: "flex", flexDirection: "column", gap: "6px", flexGrow: 1 }}>
           <div style={{ fontSize: "11px", color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.5px", padding: "6px 12px" }}>MÓDULOS</div>
+
+          {/* SOLO ADMIN: MÉTRICAS Y ANALÍTICAS */}
+          {usuarioActual.rol === "ADMIN" && (
+            <button
+              onClick={() => setPestana("dashboard")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: "8px",
+                border: "none",
+                background: pestana === "dashboard" ? "#1f6feb" : "transparent",
+                color: pestana === "dashboard" ? "#ffffff" : "#c9d1d9",
+                cursor: "pointer",
+                fontWeight: pestana === "dashboard" ? "600" : "500",
+                fontSize: "14px",
+                textAlign: "left",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+              Dashboard Analítico
+            </button>
+          )}
 
           {/* SOLO ADMIN: MÓDULO DE USUARIOS */}
           {usuarioActual.rol === "ADMIN" && (
@@ -475,7 +504,6 @@ function App() {
           </button>
         </nav>
 
-        {/* Desconexión */}
         <button
           onClick={handleLogout}
           style={{
@@ -502,6 +530,13 @@ function App() {
       {/* ÁREA DE CONTENIDO */}
       <main style={{ flexGrow: 1, padding: "32px 40px", overflowY: "auto" }}>
         
+        {/* ========================================================= */}
+        {/* VISTA ADMIN 0: DASHBOARD ANALÍTICO (CHART.JS) */}
+        {/* ========================================================= */}
+        {pestana === "dashboard" && usuarioActual.rol === "ADMIN" && (
+          <AdminDashboard />
+        )}
+
         {/* ========================================================= */}
         {/* VISTA ADMIN 1: GESTIÓN DE USUARIOS */}
         {/* ========================================================= */}
@@ -847,7 +882,7 @@ function App() {
                       <td style={{ padding: "14px 16px", fontWeight: "700", color: "#3fb950" }}>${parseFloat(ped.total).toFixed(2)}</td>
                       <td style={{ padding: "14px 16px" }}>
                         <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "11px", fontWeight: "600", background: "rgba(46, 160, 67, 0.15)", color: "#3fb950" }}>
-                          {ped.estado}
+                          {ped.estado === "PENDIENTE" ? "Pendiente de Pago" : ped.estado}
                         </span>
                       </td>
                       <td style={{ padding: "14px 16px", color: "#8b949e" }}>{new Date(ped.creado_en).toLocaleString()}</td>

@@ -6,29 +6,37 @@ const usuarioRepo = require('./src/infrastructure/adapters/repositories/Postgres
 const commerceRepo = require('./src/infrastructure/adapters/repositories/PostgresCommerceRepository');
 const bcryptAdapter = require('./src/infrastructure/adapters/security/BcryptAdapter');
 
-// Casos de uso (Capa de Aplicación)
+// Adaptador analitico
+const AnalyticsPostgresAdapter = require('./src/infrastructure/database/postgres/AnalyticsPostgresAdapter');
+const analyticsRepo = new AnalyticsPostgresAdapter(commerceRepo.pool || commerceRepo);
+
+// Adaptador de Correo (Nodemailer)
+const NodemailerEmailAdapter = require('./src/infrastructure/adapters/email/NodemailerEmailAdapter');
+const emailAdapter = new NodemailerEmailAdapter();
+
+// Casos de uso
 const UsuarioUseCases = require('./src/application/usecases/usuario/UsuarioUseCases');
 const ProductoUseCases = require('./src/application/usecases/producto/ProductoUseCases');
 const PedidoUseCases = require('./src/application/usecases/pedido/PedidoUseCases');
+const AnalyticsService = require('./src/application/use-cases/analytics/AnalyticsService');
 
 const usuarioService = new UsuarioUseCases(usuarioRepo, bcryptAdapter);
 const productoService = new ProductoUseCases(commerceRepo);
-const pedidoService = new PedidoUseCases(commerceRepo);
+const pedidoService = new PedidoUseCases(commerceRepo, emailAdapter, usuarioRepo);
+const analyticsService = new AnalyticsService(analyticsRepo);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// CONTROLADOR / RUTAS: USUARIOS
-// ==========================================
+// CONTROLADOR: USUARIOS
 app.post('/api/usuarios/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const usuario = await usuarioService.login(email, password);
     res.json({ usuario });
   } catch (err) {
-    res.status(401).json({ msg: err.message || 'Credenciales inválidas' });
+    res.status(401).json({ msg: err.message || 'Credenciales invalidas' });
   }
 });
 
@@ -68,9 +76,7 @@ app.delete('/api/usuarios/:id', async (req, res) => {
   }
 });
 
-// ==========================================
-// CONTROLADOR / RUTAS: PRODUCTOS
-// ==========================================
+// CONTROLADOR: PRODUCTOS
 app.get('/api/productos', async (req, res) => {
   try {
     const prods = await productoService.listar();
@@ -107,9 +113,7 @@ app.delete('/api/productos/:id', async (req, res) => {
   }
 });
 
-// ==========================================
-// CONTROLADOR / RUTAS: PEDIDOS
-// ==========================================
+// CONTROLADOR: PEDIDOS
 app.get('/api/pedidos', async (req, res) => {
   try {
     const pedidos = await pedidoService.listar();
@@ -123,9 +127,28 @@ app.post('/api/pedidos', async (req, res) => {
   try {
     const { usuario_id, items } = req.body;
     const nuevoPedido = await pedidoService.crearPedido(usuario_id, items);
-    res.status(201).json(nuevoPedido);
+    res.status(201).json({
+      ...nuevoPedido,
+      mensaje: 'Pedido registrado correctamente. Se ha iniciado el envio de las instrucciones de pago por correo electronico.',
+    });
   } catch (err) {
     res.status(400).json({ msg: err.message || 'Error al procesar el pedido' });
+  }
+});
+
+// CONTROLADOR: ANALITICAS
+app.get('/api/analytics/dashboard', async (req, res) => {
+  try {
+    const { range, start, end } = req.query;
+    const data = await analyticsService.getDashboardSummary({
+      range,
+      customStart: start,
+      customEnd: end,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('Error al generar metricas:', err);
+    res.status(500).json({ msg: 'Error al consultar metricas analiticas' });
   }
 });
 

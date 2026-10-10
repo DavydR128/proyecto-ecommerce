@@ -37,13 +37,32 @@ class PostgresCommerceRepository {
     return res.rows;
   }
 
-  async crearPedidoTransaccional(usuarioId, items) {
+  async crearPedidoTransaccional(usuarioId, items, estado = 'PENDIENTE') {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('El pedido debe contener al menos un producto');
+    }
+
+    const itemsNormalizados = items.map((item) => {
+      const productoId = Number(item.producto_id);
+      const cantidad = Number(item.cantidad);
+
+      if (!Number.isInteger(productoId) || productoId <= 0) {
+        throw new Error('Producto invalido en el pedido');
+      }
+
+      if (!Number.isInteger(cantidad) || cantidad <= 0) {
+        throw new Error('La cantidad de productos debe ser mayor a cero');
+      }
+
+      return { producto_id: productoId, cantidad };
+    });
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       let total = 0;
-      for (const item of items) {
+      for (const item of itemsNormalizados) {
         const prod = await client.query('SELECT * FROM productos WHERE id = $1 FOR UPDATE', [item.producto_id]);
         if (prod.rows.length === 0) throw new Error('Producto no encontrado');
         if (prod.rows[0].stock < item.cantidad) throw new Error(`Stock insuficiente para ${prod.rows[0].nombre}`);
@@ -54,11 +73,11 @@ class PostgresCommerceRepository {
 
       const pedidoRes = await client.query(
         'INSERT INTO pedidos (usuario_id, total, estado) VALUES ($1, $2, $3) RETURNING *',
-        [usuarioId, total, 'PAGADO']
+        [usuarioId, total, estado]
       );
 
       const pedidoId = pedidoRes.rows[0].id;
-      for (const item of items) {
+      for (const item of itemsNormalizados) {
         const prod = await client.query('SELECT precio FROM productos WHERE id = $1', [item.producto_id]);
         await client.query(
           'INSERT INTO pedido_detalles (pedido_id, producto_id, cantidad, precio_unitario) VALUES ($1, $2, $3, $4)',
